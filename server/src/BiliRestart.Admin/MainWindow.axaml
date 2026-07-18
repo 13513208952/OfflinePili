@@ -1,0 +1,146 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:BiliRestart.Admin.ViewModels"
+        mc:Ignorable="d" d:DesignWidth="1100" d:DesignHeight="700"
+        x:Class="BiliRestart.Admin.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Width="1100" Height="700"
+        Title="BiliRestart 管理面板（仅本机）">
+  <DockPanel>
+    <!-- 底部状态条 -->
+    <Border DockPanel.Dock="Bottom" Padding="12,6" Background="{DynamicResource MaterialCardBackgroundBrush}">
+      <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" />
+    </Border>
+
+    <TabControl Margin="8">
+
+      <!-- ============ 目录状态 ============ -->
+      <TabItem Header="目录状态">
+        <DockPanel Margin="0,8,0,0">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="12" Margin="4,0,4,8">
+            <Button Content="立即扫描" Command="{Binding SweepNowCommand}" />
+            <Button Content="刷新列表" Command="{Binding ReloadCommand}" />
+            <CheckBox Content="只看失败(排除列表)" IsChecked="{Binding ShowFailedOnly}" />
+            <CheckBox Content="只看已隐藏" IsChecked="{Binding ShowHiddenOnly}" />
+          </StackPanel>
+
+          <!-- 选中条目的手动元数据覆盖区 -->
+          <Border DockPanel.Dock="Bottom" Margin="4,8,4,0" Padding="10"
+                  Background="{DynamicResource MaterialCardBackgroundBrush}"
+                  CornerRadius="6">
+            <StackPanel Spacing="6">
+              <TextBlock Text="手动覆盖选中条目的元数据（覆盖后标记为可服务；之后对它点“重试”会用B站活取结果覆盖手动内容）"
+                         FontWeight="Bold" TextWrapping="Wrap" />
+              <Grid ColumnDefinitions="Auto,*,Auto,*" RowDefinitions="Auto,Auto,Auto" Margin="0,4,0,0">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="标题" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding EditTitle}" Margin="0,0,16,4" />
+                <TextBlock Grid.Row="0" Grid.Column="2" Text="分P/集标题" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <TextBox Grid.Row="0" Grid.Column="3" Text="{Binding EditPartTitle}" Margin="0,0,0,4" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="UP主" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding EditUploader}" Margin="0,0,16,4" />
+                <TextBlock Grid.Row="1" Grid.Column="2" Text="标签(逗号分隔)" VerticalAlignment="Center" Margin="0,0,8,4" />
+                <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding EditTags}" Margin="0,0,0,4" />
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="简介" VerticalAlignment="Top" Margin="0,4,8,0" />
+                <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Text="{Binding EditDescription}"
+                         AcceptsReturn="True" Height="60" />
+              </Grid>
+              <Button Content="保存元数据覆盖" Command="{Binding SaveMetadataCommand}" HorizontalAlignment="Right" />
+            </StackPanel>
+          </Border>
+
+          <!-- 表头 -->
+          <Grid DockPanel.Dock="Top" Margin="12,0,12,2"
+                ColumnDefinitions="90,40,*,110,70,80,170,170">
+            <TextBlock Grid.Column="0" Text="av号" FontWeight="Bold" />
+            <TextBlock Grid.Column="1" Text="P" FontWeight="Bold" />
+            <TextBlock Grid.Column="2" Text="标题" FontWeight="Bold" />
+            <TextBlock Grid.Column="3" Text="UP主" FontWeight="Bold" />
+            <TextBlock Grid.Column="4" Text="分区" FontWeight="Bold" />
+            <TextBlock Grid.Column="5" Text="状态" FontWeight="Bold" />
+            <TextBlock Grid.Column="6" Text="失败原因" FontWeight="Bold" />
+            <TextBlock Grid.Column="7" Text="操作" FontWeight="Bold" />
+          </Grid>
+
+          <ListBox ItemsSource="{Binding Entries}"
+                   SelectedItem="{Binding SelectedEntry}"
+                   SelectionMode="Single">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:CatalogEntryRowViewModel">
+                <Grid ColumnDefinitions="90,40,*,110,70,80,170,170" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding AvNumber}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="1" Text="{Binding PartIndex}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="2" Text="{Binding DisplayTitle}" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding LocalFilePath}" />
+                  <TextBlock Grid.Column="3" Text="{Binding Uploader}" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBlock Grid.Column="4" Text="{Binding Zone}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="5" Text="{Binding Status}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="6" Text="{Binding FailureReason}" VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding FailureReason}" />
+                  <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="6">
+                    <Button Content="重试" Padding="8,2" FontSize="12"
+                            IsEnabled="{Binding CanRetry}"
+                            Command="{Binding $parent[Window].DataContext.RetryCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Content="{Binding HideButtonText}" Padding="8,2" FontSize="12"
+                            Command="{Binding $parent[Window].DataContext.ToggleHideCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+
+      <!-- ============ 路径配置 ============ -->
+      <TabItem Header="路径配置">
+        <StackPanel Margin="8,16" Spacing="10" MaxWidth="820" HorizontalAlignment="Left">
+          <TextBlock Text="数据源路径（保存后路径/并发数当场生效；扫描间隔需重启进程生效）"
+                     FontWeight="Bold" />
+          <TextBlock Text="视频归档数据库 archive.db 路径（格式见 docs/归档格式规范.md）" />
+          <TextBox Text="{Binding ArchiveDbPath}" />
+          <TextBlock Text="弹幕评论采集数据库根目录（含 collect_history/current/comment.db）" />
+          <TextBox Text="{Binding DanmuCommentDbRootDir}" />
+          <Grid ColumnDefinitions="Auto,160,40,Auto,160" Margin="0,6,0,0">
+            <TextBlock Grid.Column="0" Text="元数据回填并发数" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox Grid.Column="1" Text="{Binding MaxConcurrentFetches}" />
+            <TextBlock Grid.Column="3" Text="自动扫描间隔(分钟)" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox Grid.Column="4" Text="{Binding SweepIntervalMinutes}" />
+          </Grid>
+          <Button Content="保存配置" Command="{Binding SaveConfigCommand}" HorizontalAlignment="Left" Margin="0,8,0,0" />
+        </StackPanel>
+      </TabItem>
+
+      <!-- ============ 回填历史 ============ -->
+      <TabItem Header="回填历史">
+        <DockPanel Margin="0,8,0,0">
+          <Grid DockPanel.Dock="Top" Margin="12,0,12,2"
+                ColumnDefinitions="180,90,100,100,100">
+            <TextBlock Grid.Column="0" Text="开始时间" FontWeight="Bold" />
+            <TextBlock Grid.Column="1" Text="耗时" FontWeight="Bold" />
+            <TextBlock Grid.Column="2" Text="尝试" FontWeight="Bold" />
+            <TextBlock Grid.Column="3" Text="成功" FontWeight="Bold" />
+            <TextBlock Grid.Column="4" Text="失败" FontWeight="Bold" />
+          </Grid>
+          <ListBox ItemsSource="{Binding Runs}">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ReconciliationRunRowViewModel">
+                <Grid ColumnDefinitions="180,90,100,100,100" Margin="0,2">
+                  <TextBlock Grid.Column="0" Text="{Binding StartedAt}" />
+                  <TextBlock Grid.Column="1" Text="{Binding Duration}" />
+                  <TextBlock Grid.Column="2" Text="{Binding ItemsAttempted}" />
+                  <TextBlock Grid.Column="3" Text="{Binding ItemsSucceeded}" />
+                  <TextBlock Grid.Column="4" Text="{Binding ItemsFailed}" />
+                </Grid>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </TabItem>
+
+    </TabControl>
+  </DockPanel>
+</Window>

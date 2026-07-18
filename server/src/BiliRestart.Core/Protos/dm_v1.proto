@@ -1,0 +1,26 @@
+syntax = "proto3";
+package bilibili.community.service.dm.v1;
+option csharp_namespace = "BiliRestart.Core.Protos.Dm";
+
+// 字段编号/类型对齐 PiliPlus fork 里 lib/grpc/bilibili/community/service/dm/v1.pb.dart
+// 的 DanmakuElem/DmSegMobileReply 生成代码，只声明客户端渲染实际用到的字段，
+// 未声明的字段号（15/22/23/24/25/26/27/100/101等）本服务端不发送，不影响解码。
+message DanmakuElem {
+  int64 id = 1;
+  int32 progress = 2;
+  int32 mode = 3;
+  int32 fontsize = 4;
+  uint32 color = 5;
+  string midHash = 6;
+  string content = 7;
+  int64 ctime = 8;
+  int32 weight = 9;
+  string action = 10;
+  int32 pool = 11;
+  string idStr = 12;
+  int32 attr = 13;
+}
+
+message DmSegMobileReply {
+  repeated DanmakuElem elems = 1;
+}

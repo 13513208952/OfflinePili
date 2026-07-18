@@ -1,0 +1,3 @@
+adb.exe / AdbWinApi.dll / AdbWinUsbApi.dll 来自 Google Android SDK Platform-Tools，
+依 Apache License 2.0 随本服务端再分发，用于"USB直连"功能(自动布置 adb reverse 隧道)。
+License: https://www.apache.org/licenses/LICENSE-2.0

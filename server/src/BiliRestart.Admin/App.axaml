@@ -1,0 +1,12 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:themes="using:Material.Styles.Themes"
+             x:Class="BiliRestart.Admin.App"
+             RequestedThemeVariant="Default">
+             <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
+
+    <Application.Styles>
+        <themes:MaterialTheme BaseTheme="Inherit" PrimaryColor="Teal" SecondaryColor="Amber" />
+        <!-- DataGrid 样式在 Phase 3 实现目录状态表时按 Material.Avalonia.DataGrid 实际资源路径接入 -->
+    </Application.Styles>
+</Application>

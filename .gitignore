@@ -1,0 +1,24 @@
+# 构建产物
+[Bb]in/
+[Oo]bj/
+*.user
+
+# 服务端运行时数据（各自本机生成，不入库）
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# 视频与弹幕评论归档、测试样本（使用者自备，不随源码分发）
+test-fixtures/
+sample-data/
+
+# 随发布包附带的第三方 adb 二进制（见 server/src/BiliRestart.Api/tools/adb/README.md）
+server/src/BiliRestart.Api/tools/adb/adb.exe
+server/src/BiliRestart.Api/tools/adb/*.dll
+
+# IDE / 系统
+.vs/
+.idea/
+.DS_Store
+Thumbs.db

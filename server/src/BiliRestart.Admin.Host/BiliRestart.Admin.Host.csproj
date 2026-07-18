@@ -1,0 +1,21 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\BiliRestart.Core\BiliRestart.Core.csproj" />
+    <ProjectReference Include="..\BiliRestart.Api\BiliRestart.Api.csproj" />
+    <ProjectReference Include="..\BiliRestart.Admin\BiliRestart.Admin.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 纯控制台SDK项目要显式引ASP.NET Core共享框架才能用WebApplication/Kestrel -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
