@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using BiliRestart.Core.Catalog;
+using BiliRestart.Core.Plugins;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -32,8 +33,63 @@ public sealed class MainViewModel : ViewModelBase
         RetryCommand = new AsyncRelayCommand(p => RetryAsync(p as CatalogEntryRowViewModel));
         ToggleHideCommand = new AsyncRelayCommand(p => ToggleHideAsync(p as CatalogEntryRowViewModel));
         SaveMetadataCommand = new AsyncRelayCommand(_ => SaveMetadataAsync());
+        SaveOverrideAndRefetchCommand = new AsyncRelayCommand(_ => SaveOverrideAndRefetchAsync());
+        AcquireVideoCommand = new AsyncRelayCommand(_ => AcquireVideoAsync());
+
+        // 视频获取插件：扫 plugins/ 目录，加载到才启用"下载入库"能力(功能性代码全在补丁)。
+        var pluginsDir = Path.Combine(AppContext.BaseDirectory, "plugins");
+        _acquisitionPlugin = PluginLoader.LoadVideoAcquisition(pluginsDir);
+        PluginStatus = _acquisitionPlugin is null
+            ? $"未检测到视频获取补丁（把补丁 DLL 放进 {pluginsDir} 后重启启用）"
+            : $"已加载视频获取补丁：{_acquisitionPlugin.Name}";
 
         _ = ReloadAsync();
+    }
+
+    // ---- 视频获取补丁(能力A的可选接口，实现在 plugins/ 下的闭源DLL) ----
+    private readonly IVideoAcquisitionPlugin? _acquisitionPlugin;
+    public bool PluginAvailable => _acquisitionPlugin is not null;
+
+    private string _pluginStatus = "";
+    public string PluginStatus { get => _pluginStatus; set => Set(ref _pluginStatus, value); }
+
+    private string _downloadAvOrBv = "";
+    public string DownloadAvOrBv { get => _downloadAvOrBv; set => Set(ref _downloadAvOrBv, value); }
+
+    public AsyncRelayCommand AcquireVideoCommand { get; }
+
+    private async Task AcquireVideoAsync()
+    {
+        if (_acquisitionPlugin is null)
+        {
+            StatusMessage = "未加载视频获取补丁，无法下载";
+            return;
+        }
+        var target = DownloadAvOrBv.Trim();
+        if (target.Length == 0)
+        {
+            StatusMessage = "先填入要下载的 av/bv 号";
+            return;
+        }
+        StatusMessage = $"正在通过补丁下载 {target} …";
+        try
+        {
+            // 视频落盘根目录默认取 archive.db 所在目录；插件负责下载、合并、
+            // 并把结果按标准格式追加写入 archive.db，之后由回填/服务照常接手。
+            var archiveDb = _liveOptions.ArchiveDbPath;
+            var videoDir = Path.GetDirectoryName(Path.GetFullPath(archiveDb)) ?? AppContext.BaseDirectory;
+            var progress = new Progress<string>(msg => StatusMessage = msg);
+            var result = await _acquisitionPlugin.AcquireAsync(
+                new VideoAcquisitionRequest(target, archiveDb, videoDir), progress);
+            StatusMessage = result.Success
+                ? $"下载入库完成: av{result.AvNumber} —— 点\"立即扫描\"回填元数据"
+                : $"下载失败: {result.Message}";
+            if (result.Success) await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"下载异常: {ex.Message}";
+        }
     }
 
     // ---- 状态条 ----
@@ -140,7 +196,10 @@ public sealed class MainViewModel : ViewModelBase
 
             var query = db.CatalogEntries.AsNoTracking();
             if (ShowHiddenOnly) query = query.Where(e => e.IsHidden);
-            if (ShowFailedOnly) query = query.Where(e => e.MetadataStatus == MetadataStatus.Failed);
+            // "无元数据" = 未成功回填(Failed 已尝试失败 + Pending 还没抓)。点"立即扫描"
+            // 会批量处理所有 Pending/Failed，即对这批统一触发下载(能力B)。
+            if (ShowFailedOnly)
+                query = query.Where(e => e.MetadataStatus != MetadataStatus.Fetched);
             var entries = await query
                 .OrderBy(e => e.AvNumber).ThenBy(e => e.PartIndex)
                 .ToListAsync();
@@ -241,13 +300,55 @@ public sealed class MainViewModel : ViewModelBase
     private string _editUploader = "";
     public string EditUploader { get => _editUploader; set => Set(ref _editUploader, value); }
 
+    // 能力C：这条视频回填元数据时改用哪个 av/bv 的元数据(撞车用)。空=用本视频自己的号。
+    private string _editMetadataSourceOverride = "";
+    public string EditMetadataSourceOverride
+    {
+        get => _editMetadataSourceOverride;
+        set => Set(ref _editMetadataSourceOverride, value);
+    }
+
     public AsyncRelayCommand SaveMetadataCommand { get; }
+    public AsyncRelayCommand SaveOverrideAndRefetchCommand { get; }
+
+    // 保存"元数据来源号"覆盖并标记待重采：下一次扫描会用指定的 av/bv 去取元数据。
+    private async Task SaveOverrideAndRefetchAsync()
+    {
+        var row = SelectedEntry;
+        if (row is null)
+        {
+            StatusMessage = "先在目录表里选中一个条目";
+            return;
+        }
+        try
+        {
+            using var scope = _services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<CatalogDbContext>();
+            var entity = await db.CatalogEntries.FirstOrDefaultAsync(e => e.Id == row.Id);
+            if (entity is null) return;
+            entity.MetadataSourceOverride = EditMetadataSourceOverride.Trim();
+            // 转Pending，让扫描重新用(覆盖的或本身的)号活取元数据
+            entity.MetadataStatus = MetadataStatus.Pending;
+            entity.FailureReason = "";
+            await db.SaveChangesAsync();
+            row.Status = nameof(MetadataStatus.Pending);
+            row.FailureReason = "";
+            StatusMessage = string.IsNullOrWhiteSpace(entity.MetadataSourceOverride)
+                ? $"已清除来源覆盖，av{row.AvNumber} P{row.PartIndex} 待用本号重采(点\"立即扫描\")"
+                : $"av{row.AvNumber} P{row.PartIndex} 将改用 {entity.MetadataSourceOverride} 的元数据重采(点\"立即扫描\")";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"来源覆盖保存失败: {ex.Message}";
+        }
+    }
 
     private async Task LoadEditFieldsAsync(CatalogEntryRowViewModel? row)
     {
         if (row is null)
         {
             EditTitle = EditPartTitle = EditDescription = EditTags = EditUploader = "";
+            EditMetadataSourceOverride = "";
             return;
         }
         try
@@ -261,6 +362,7 @@ public sealed class MainViewModel : ViewModelBase
             EditDescription = entity.Description;
             EditTags = entity.TagsCsv;
             EditUploader = entity.UploaderName;
+            EditMetadataSourceOverride = entity.MetadataSourceOverride;
         }
         catch (Exception ex)
         {

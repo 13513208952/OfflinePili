@@ -40,6 +40,10 @@ public sealed class CatalogEntry
     // 管理面板"永久隐藏"：本地文件在、元数据也可能抓到了，但运维不想让它出现在
     // 可服务目录里。隐藏的条目不进任何API结果、回填扫描也不再碰它。
     public bool IsHidden { get; set; }
+    // 元数据来源覆盖：默认空=用本视频自己的 bvid/av 回填元数据；撞车(av号在B站
+    // 现在指向别的视频)时，运维在管理面板填入"正确对应视频"的 av/bv，回填改用它取
+    // 元数据(标题/UP/封面/标签等)，但视频文件、cid/分P仍是本地这份。
+    public string MetadataSourceOverride { get; set; } = "";
 }
 
 public sealed class DanmakuSource

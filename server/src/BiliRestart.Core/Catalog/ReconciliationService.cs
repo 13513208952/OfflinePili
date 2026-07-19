@@ -151,7 +151,11 @@ public sealed class ReconciliationService(
             }
             else
             {
-                var meta = await metadataClient.FetchAsync(entry.Bvid, ct);
+                // 撞车覆盖：填了就用指定的 av/bv 取元数据，否则用本视频自己的 bvid
+                var metaSource = string.IsNullOrEmpty(entry.MetadataSourceOverride)
+                    ? entry.Bvid
+                    : entry.MetadataSourceOverride;
+                var meta = await metadataClient.FetchAsync(metaSource, ct);
                 if (meta == null)
                 {
                     entry.MetadataStatus = MetadataStatus.Failed;

@@ -22,10 +22,14 @@ public sealed record FetchedVideoMetadata(
 // 回填标题/简介/标签/发布日期等元数据，不涉及绕过任何access限制。
 public sealed class BilibiliMetadataClient(HttpClient httpClient)
 {
-    public async Task<FetchedVideoMetadata?> FetchAsync(string bvid, CancellationToken ct = default)
+    public async Task<FetchedVideoMetadata?> FetchAsync(string avOrBvid, CancellationToken ct = default)
     {
+        // 支持 BV 与 av(纯数字/av前缀)——撞车覆盖时运维可能填任一种
+        var query = avOrBvid.StartsWith("BV", StringComparison.OrdinalIgnoreCase)
+            ? $"bvid={avOrBvid}"
+            : $"aid={avOrBvid.TrimStart('a', 'A', 'v', 'V')}";
         var viewJson = await httpClient.GetStringAsync(
-            $"https://api.bilibili.com/x/web-interface/view?bvid={bvid}", ct);
+            $"https://api.bilibili.com/x/web-interface/view?{query}", ct);
         using var viewDoc = JsonDocument.Parse(viewJson);
         var root = viewDoc.RootElement;
         if (root.GetProperty("code").GetInt32() != 0) return null;
