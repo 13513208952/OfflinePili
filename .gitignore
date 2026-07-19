@@ -22,3 +22,6 @@ server/src/BiliRestart.Api/tools/adb/*.dll
 .idea/
 .DS_Store
 Thumbs.db
+
+# 视频获取补丁(功能性下载代码)只在 patched 分支/私有仓，绝不进公共 master
+server/plugins-src/
