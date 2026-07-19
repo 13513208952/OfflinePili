@@ -141,6 +141,9 @@ public sealed class ReconciliationService(
                 entry.Cid = ep.Cid;
                 entry.DurationSeconds = ep.DurationSeconds;
                 entry.PublishedAtUnix = ep.PublishedAtUnix;
+                // 番剧季度级播放/点赞，否则客户端最低播放量过滤会把所有番剧判出推荐流
+                entry.ViewCountAtArchive = ep.ViewCount;
+                entry.LikeCountAtArchive = ep.LikeCount;
                 if (ep.CoverBytes != null)
                 {
                     entry.CoverImagePath = SaveCover(entry.Bvid + "_ep" + epId, ep.CoverBytes);
@@ -173,6 +176,11 @@ public sealed class ReconciliationService(
                 if (meta.CoverBytes != null)
                 {
                     entry.CoverImagePath = SaveCover(entry.Bvid, meta.CoverBytes);
+                }
+                // UP主头像按mid缓存一份，离线模式客户端视频页卡片靠它显示头像
+                if (meta.AvatarBytes != null && entry.UploaderMid != 0)
+                {
+                    entry.UploaderFace = SaveCover($"avatar_{entry.UploaderMid}", meta.AvatarBytes);
                 }
             }
 

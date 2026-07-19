@@ -14,6 +14,7 @@ public sealed record FetchedVideoMetadata(
     long ViewCount,
     long LikeCount,
     byte[]? CoverBytes,
+    byte[]? AvatarBytes,
     IReadOnlyList<(long Cid, int Page, string Part, int DurationSeconds)> Pages);
 
 // 回填扫描用：只读调用B站公开的view/tags接口，拿归档时缺失的元数据。
@@ -84,14 +85,32 @@ public sealed class BilibiliMetadataClient(HttpClient httpClient)
         try
         {
             var picUrl = data.GetProperty("pic").GetString();
-            if (!string.IsNullOrEmpty(picUrl))
+            // 老视频(如av2)在B站的封面就是 bfs/archive/transparent.png 透明占位图，
+            // 抓下来是张一两百字节的空图，客户端显示成破封面。直接判为无封面，
+            // 让客户端回退到自己的默认封面。
+            if (!string.IsNullOrEmpty(picUrl) && !IsPlaceholderCover(picUrl))
             {
-                coverBytes = await httpClient.GetByteArrayAsync(picUrl, ct);
+                var bytes = await httpClient.GetByteArrayAsync(picUrl, ct);
+                if (bytes.Length >= 512) coverBytes = bytes; // 过小的基本是占位/错误图，丢弃
             }
         }
         catch
         {
             // 封面拉不到不影响主流程
+        }
+
+        byte[]? avatarBytes = null;
+        try
+        {
+            var faceUrl = owner.TryGetProperty("face", out var faceEl) ? faceEl.GetString() : null;
+            if (!string.IsNullOrEmpty(faceUrl))
+            {
+                avatarBytes = await httpClient.GetByteArrayAsync(faceUrl, ct);
+            }
+        }
+        catch
+        {
+            // 头像拉不到不影响主流程
         }
 
         return new FetchedVideoMetadata(
@@ -112,8 +131,14 @@ public sealed class BilibiliMetadataClient(HttpClient httpClient)
             ViewCount: stat.TryGetProperty("view", out var viewEl) ? viewEl.GetInt64() : 0,
             LikeCount: stat.TryGetProperty("like", out var likeEl) ? likeEl.GetInt64() : 0,
             CoverBytes: coverBytes,
+            AvatarBytes: avatarBytes,
             Pages: pages);
     }
+
+    // B站给下架/极老视频的封面常是这张透明占位图，判掉，避免存下一张破封面。
+    private static bool IsPlaceholderCover(string picUrl) =>
+        picUrl.Contains("transparent.png", StringComparison.OrdinalIgnoreCase) ||
+        picUrl.Contains("/blank", StringComparison.OrdinalIgnoreCase);
 
     // 番剧分集：archive.db 不存每集的bvid，只有文件名里的epId，所以走 PGC 的
     // season接口(公开、不需要bvid)按ep_id查，season.episodes里找到对应那一集。
@@ -127,6 +152,16 @@ public sealed class BilibiliMetadataClient(HttpClient httpClient)
 
         var result = root.GetProperty("result");
         var seasonTitle = result.TryGetProperty("title", out var st) ? st.GetString() ?? "" : "";
+
+        // 季度级播放/点赞(episode级stat为null)，作为分集的历史快照
+        long seasonViews = 0, seasonLikes = 0;
+        if (result.TryGetProperty("stat", out var seasonStat))
+        {
+            if (seasonStat.TryGetProperty("views", out var vEl) && vEl.ValueKind == JsonValueKind.Number)
+                seasonViews = vEl.GetInt64();
+            if (seasonStat.TryGetProperty("likes", out var lEl) && lEl.ValueKind == JsonValueKind.Number)
+                seasonLikes = lEl.GetInt64();
+        }
 
         byte[]? seasonCover = null;
         try
@@ -154,6 +189,8 @@ public sealed class BilibiliMetadataClient(HttpClient httpClient)
                 Cid: ep.GetProperty("cid").GetInt64(),
                 DurationSeconds: ep.TryGetProperty("duration", out var d) ? (int)(d.GetInt64() / 1000) : 0,
                 PublishedAtUnix: ep.TryGetProperty("pub_time", out var pt) ? pt.GetInt64() : 0,
+                ViewCount: seasonViews,
+                LikeCount: seasonLikes,
                 CoverBytes: seasonCover);
         }
         return null;
@@ -166,4 +203,8 @@ public sealed record FetchedBangumiEpisode(
     long Cid,
     int DurationSeconds,
     long PublishedAtUnix,
+    // 番剧的播放/点赞是季度级聚合(episode级stat为null)，取season.stat填给每一集。
+    // 必须非0，否则客户端的最低播放量推荐过滤会把所有番剧判掉(view=0<阈值)。
+    long ViewCount,
+    long LikeCount,
     byte[]? CoverBytes);

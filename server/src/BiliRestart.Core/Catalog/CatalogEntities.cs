@@ -26,6 +26,9 @@ public sealed class CatalogEntry
     public string Tname { get; set; } = ""; // 分区名（如"音乐"/"游戏"/"番剧"）
     public string UploaderName { get; set; } = "";
     public long UploaderMid { get; set; }
+    // UP主头像的本地缓存文件路径（像封面一样回填时从B站抓下来缓存，按mid存一份）。
+    // 离线模式下客户端视频页的UP主卡片(名字+头像)靠它显示，粉丝/投稿数不做。
+    public string UploaderFace { get; set; } = "";
     public long PublishedAtUnix { get; set; }
     public int DurationSeconds { get; set; }
     public long ViewCountAtArchive { get; set; }

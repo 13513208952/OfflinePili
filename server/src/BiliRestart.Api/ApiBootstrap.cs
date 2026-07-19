@@ -99,7 +99,12 @@ public static class ApiBootstrap
                     tname = e.Tname,
                     view_count = e.ViewCountAtArchive,
                     like_count = e.LikeCountAtArchive,
-                    owner = new { mid = e.UploaderMid, name = e.UploaderName }
+                    owner = new
+                    {
+                        mid = e.UploaderMid,
+                        name = e.UploaderName,
+                        face = string.IsNullOrEmpty(e.UploaderFace) ? "" : $"{baseUrl}/api/v1/avatars/{e.UploaderMid}"
+                    }
                 });
 
             return Results.Ok(items);
@@ -130,7 +135,12 @@ public static class ApiBootstrap
                     : new[] { new { raw_text = head.Description, type = 1, biz_id = 0 } },
                 pubdate = head.PublishedAtUnix,
                 duration = entries.Sum(e => e.DurationSeconds),
-                owner = new { mid = head.UploaderMid, name = head.UploaderName, face = "" },
+                owner = new
+                {
+                    mid = head.UploaderMid,
+                    name = head.UploaderName,
+                    face = string.IsNullOrEmpty(head.UploaderFace) ? "" : $"{baseUrl}/api/v1/avatars/{head.UploaderMid}"
+                },
                 pic = $"{baseUrl}/api/v1/covers/{head.Bvid}",
                 tags = head.TagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries),
                 tid = head.Tid,
@@ -287,7 +297,7 @@ public static class ApiBootstrap
             }
 
             // PiliPlus 的 ReplyData/ReplyItemModel/ReplyMember 期望的JSON形状和
-            // BiliDanmuComment 原始归档形状不完全一样（顶层是 replies 不是 aid+total，
+            // BiliDanmuComment_cs 原始归档形状不完全一样（顶层是 replies 不是 aid+total，
             // 楼中楼字段叫 replies 不是 sub_replies，member.mid 要求是字符串不是数字），
             // 这里按 PiliPlus 实际 fromJson 代码原样重整形，而不是猜的。
             object ReshapeReply(CommentReply r) => new
@@ -322,13 +332,33 @@ public static class ApiBootstrap
 
         app.MapGet("/api/v1/covers/{avOrBv}", async (CatalogDbContext db, string avOrBv) =>
         {
-            var entries = await FindEntriesAsync(db, avOrBv);
+            // 客户端图片加载器会给图URL追加 @1q.webp 之类的B站CDN缩放后缀，
+            // 本地封面不认，这里把 @ 之后的部分剥掉再查。
+            var entries = await FindEntriesAsync(db, StripImageSuffix(avOrBv));
             var withCover = entries.FirstOrDefault(e => !string.IsNullOrEmpty(e.CoverImagePath) && File.Exists(e.CoverImagePath));
             if (withCover is null) return Results.NotFound();
             return Results.File(withCover.CoverImagePath, "image/jpeg");
         });
 
+        // UP主头像：按mid返回回填时缓存的头像。同样容忍客户端追加的 @ 缩放后缀。
+        app.MapGet("/api/v1/avatars/{mid}", async (CatalogDbContext db, string mid) =>
+        {
+            if (!long.TryParse(StripImageSuffix(mid), out var uploaderMid)) return Results.NotFound();
+            var entry = await db.CatalogEntries
+                .FirstOrDefaultAsync(e => e.UploaderMid == uploaderMid && e.UploaderFace != "");
+            if (entry is null || !File.Exists(entry.UploaderFace)) return Results.NotFound();
+            return Results.File(entry.UploaderFace, "image/jpeg");
+        });
+
         app.MapGet("/api/v1/config", () => Results.Ok(new { aiSubtitles = false, vipGate = false, chargeGate = false }));
+    }
+
+    // 剥掉客户端图片加载器追加的 @1q.webp / @320w_200h.webp 等B站CDN缩放后缀，
+    // 取回纯 bvid / mid。
+    private static string StripImageSuffix(string s)
+    {
+        var at = s.IndexOf('@');
+        return at >= 0 ? s[..at] : s;
     }
 
     private static async Task<List<CatalogEntry>> FindEntriesAsync(CatalogDbContext db, string avOrBv)
